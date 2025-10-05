@@ -2,7 +2,7 @@ import tkinter as tk
 from tkinter import scrolledtext
 import networkx as nx
 import matplotlib.pyplot as plt
-
+from collections import deque
 
 # --------- Дані ---------
 vertices = ["a", "b", "c", "d", "e", "f", "g"]
@@ -14,8 +14,7 @@ ms = [[0, 1, 1, 0, 1, 0, 0],  # a
       [0, 0, 1, 1, 1, 0, 1],  # f
       [0, 0, 1, 1, 0, 0, 1]]  # g
 
-
-# --------- Методи ---------
+# --------- Методи (ті, що в тебе були) ---------
 def get_edges(ms, vertices):
     edges = []
     n = len(vertices)
@@ -24,7 +23,6 @@ def get_edges(ms, vertices):
             if ms[i][j] == 1:
                 edges.append((vertices[i], vertices[j]))
     return edges
-
 
 def get_adj_list(ms, vertices):
     adj_list = {v: [] for v in vertices}
@@ -35,7 +33,6 @@ def get_adj_list(ms, vertices):
                 adj_list[vertices[i]].append(vertices[j])
     return adj_list
 
-
 def get_inc_matrix(ms, vertices, edges):
     n, m = len(vertices), len(edges)
     inc_matrix = [[0]*m for _ in range(n)]
@@ -45,72 +42,47 @@ def get_inc_matrix(ms, vertices, edges):
         inc_matrix[j][k] = 1
     return inc_matrix
 
-
 def show_graph(edges):
     G = nx.Graph()
     G.add_edges_from(edges)
-
     plt.figure(figsize=(6, 6))
     nx.draw(G, with_labels=True, node_size=700,
             node_color="lightblue", font_size=12, font_weight="bold")
-    plt.show()
+    plt.show()  # це блокує виконання, тому ми викликаємо його після вставки обходів у вікно
 
-def edges_from_inc_matrix(inc_matrix, vertices):
-    
-    edges = []
-    n = len(vertices)      # кількість вершин
-    m = len(inc_matrix[0]) # кількість ребер (стовпців)
+# --------- DFS (повертає список у порядку відвідування) ---------
+def dfs(adj_list, start):
+    visited = set()
+    order = []
 
-    for k in range(m):  # ідемо по стовпцях (ребрах)
-        connected_vertices = []
-        for i in range(n):  # ідемо по вершинах
-            if inc_matrix[i][k] == 1:
-                connected_vertices.append(vertices[i])
-        if len(connected_vertices) == 2:  # ребро з двох вершин
-            edges.append((connected_vertices[0], connected_vertices[1]))
-    return edges
+    def _dfs(u):
+        visited.add(u)
+        order.append(u)
+        # якщо хочеш детермінований (передбачуваний) порядок, можна сортувати сусідів:
+        for v in adj_list.get(u, []):
+            if v not in visited:
+                _dfs(v)
 
+    _dfs(start)
+    return order
 
-def adj_matrix_from_inc_matrix(inc_matrix, vertices):
-    """
-    Побудова матриці суміжності з матриці інцидентності.
-    """
-    n = len(vertices)
-    m = len(inc_matrix[0])
-    adj_matrix = [[0]*n for _ in range(n)]
+# --------- BFS (як і раніше) ---------
+def bfs(adj_list, start):
+    visited = set()
+    queue = deque([start])
+    visited.add(start)
+    order = []
 
-    for k in range(m):  # для кожного ребра
-        connected_vertices = []
-        for i in range(n):
-            if inc_matrix[i][k] == 1:
-                connected_vertices.append(i)
-        if len(connected_vertices) == 2:
-            u, v = connected_vertices
-            adj_matrix[u][v] = 1
-            adj_matrix[v][u] = 1
-    return adj_matrix
+    while queue:
+        v = queue.popleft()
+        order.append(v)
+        for neighbor in adj_list[v]:
+            if neighbor not in visited:
+                visited.add(neighbor)
+                queue.append(neighbor)
+    return order
 
-
-def adj_list_from_inc_matrix(inc_matrix, vertices):
-    """
-    Побудова списку суміжності з матриці інцидентності.
-    """
-    n = len(vertices)
-    m = len(inc_matrix[0])
-    adj_list = {v: [] for v in vertices}
-
-    for k in range(m):  # для кожного ребра
-        connected_vertices = []
-        for i in range(n):
-            if inc_matrix[i][k] == 1:
-                connected_vertices.append(vertices[i])
-        if len(connected_vertices) == 2:
-            u, v = connected_vertices
-            adj_list[u].append(v)
-            adj_list[v].append(u)
-    return adj_list
-
-# --------- Інтерфейс ---------
+# --------- Інтерфейс та запуск (run_program) ---------
 def run_program():
     edges = get_edges(ms, vertices)
     adj_list = get_adj_list(ms, vertices)
@@ -119,12 +91,11 @@ def run_program():
     output.delete("1.0", tk.END)
 
     output.insert(tk.END, "Матриця суміжності:\n")
-    output.insert(tk.END,vertices,"\n")
-    output.insert(tk.END,"\n")
+    output.insert(tk.END, " ".join(vertices) + "\n\n")   # виправлено: перелік вершин як рядок
     for a in ms:
         output.insert(tk.END, f"{a}\n")
 
-    output.insert(tk.END, "Список ребер:\n")
+    output.insert(tk.END, "\nСписок ребер:\n")
     for e in edges:
         output.insert(tk.END, f"{e}\n")
 
@@ -137,9 +108,16 @@ def run_program():
     for i, row in enumerate(inc_matrix):
         output.insert(tk.END, f"{vertices[i]} {row}\n")
 
-    # Показати граф окремим вікном
-    show_graph(edges)
+    # --- ОБХОДИ: запускаємо ПЕРЕД show_graph(), щоб plt.show() не блокував вивід ---
+    start_vertex = "a"
+    dfs_result = dfs(adj_list, start_vertex)
+    bfs_result = bfs(adj_list, start_vertex)
 
+    output.insert(tk.END, f"\nDFS (з вершини {start_vertex}): {dfs_result}\n")
+    output.insert(tk.END, f"BFS (з вершини {start_vertex}): {bfs_result}\n")
+
+    # Показати граф (після вставки тексту)
+    show_graph(edges)
 
 # --------- Запуск Tkinter ---------
 window = tk.Tk()
