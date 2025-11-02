@@ -1,8 +1,9 @@
 import tkinter as tk
-from tkinter import scrolledtext, Button
+from tkinter import ttk, scrolledtext, Button
 import matplotlib.pyplot as plt
 import networkx as nx
 import heapq
+from prettytable import PrettyTable
 
 # --- створення графа ---
 edges = [
@@ -23,10 +24,10 @@ for u, v, w in edges:
     if u not in graph:
         graph[u] = {}
     graph[u][v] = w
-print(graph)
 
-# алгоритм Дейкстри 
-def dijkstra(graph, start):
+# --- Алгоритм Дейкстри (з проміжними кроками) ---
+def dijkstra_steps(graph, start):
+    steps = []
     distances = {vertex: float('inf') for vertex in graph}
     for u in graph:
         for v in graph[u]:
@@ -35,27 +36,38 @@ def dijkstra(graph, start):
     distances[start] = 0
     queue = [(0, start)]
 
+    step_num = 1
     while queue:
         current_dist, current_vertex = heapq.heappop(queue)
         if current_dist > distances[current_vertex]:
             continue
+
+        step_info = f"Крок {step_num}: розглядаємо вершину {current_vertex}\n"
+        table = PrettyTable(["Вершина", "Відстань від 'a'"])
+        for v in sorted(distances.keys()):
+            val = distances[v] if distances[v] != float('inf') else "-"
+            table.add_row([v, val])
+        step_info += str(table) + "\n\n"
+        steps.append(step_info)
 
         for neighbor, weight in graph.get(current_vertex, {}).items():
             distance = current_dist + weight
             if distance < distances[neighbor]:
                 distances[neighbor] = distance
                 heapq.heappush(queue, (distance, neighbor))
-    return distances
 
-# алгоритм Флойда–Воршелла
-def floyd_warshall(graph):
+        step_num += 1
+
+    return distances, steps
+
+# --- Алгоритм Флойда–Воршелла (з проміжними кроками) ---
+def floyd_warshall_steps(graph):
     vertices = set(graph.keys())
     for u in graph:
         for v in graph[u]:
             vertices.add(v)
     vertices = sorted(list(vertices))
 
-    
     dist = {u: {v: float('inf') for v in vertices} for u in vertices}
     for u in vertices:
         dist[u][u] = 0
@@ -63,15 +75,24 @@ def floyd_warshall(graph):
         for v in graph[u]:
             dist[u][v] = graph[u][v]
 
-    
+    steps = []
+    step_num = 1
     for k in vertices:
         for i in vertices:
             for j in vertices:
                 if dist[i][j] > dist[i][k] + dist[k][j]:
                     dist[i][j] = dist[i][k] + dist[k][j]
-    return dist
 
+        table = PrettyTable([" "] + vertices)
+        for i in vertices:
+            row = [i] + [dist[i][j] if dist[i][j] != float('inf') else '-' for j in vertices]
+            table.add_row(row)
+        steps.append(f"Крок {step_num}: враховуємо проміжну вершину {k}\n{table}\n\n")
+        step_num += 1
 
+    return dist, steps
+
+# --- граф для відображення ---
 pos = {
     'a': (0, 0),
     'b': (1, 1),
@@ -82,12 +103,10 @@ pos = {
     'h': (1.2, -1.5)
 }
 
-# --- функція для відображення графа ---
 def show_graph():
     G = nx.DiGraph()
     for u, v, w in edges:
         G.add_edge(u, v, weight=w)
-
     plt.figure(figsize=(7, 6))
     nx.draw(G, pos, with_labels=True, node_color='lightblue', node_size=1200,
             font_size=12, arrows=True, arrowstyle='-|>', arrowsize=15)
@@ -97,32 +116,46 @@ def show_graph():
     plt.axis('off')
     plt.show()
 
-# --- виконання алгоритмів ---
-dijkstra_result = dijkstra(graph, 'a')
-floyd_result = floyd_warshall(graph)
+# --- Запуск алгоритмів ---
+dijkstra_result, dijkstra_steps_list = dijkstra_steps(graph, 'a')
+floyd_result, floyd_steps_list = floyd_warshall_steps(graph)
 
-# --- інтерфейс Tkinter ---
+# --- Tkinter UI ---
 root = tk.Tk()
-root.title("Алгоритми Дейкстри та Флойда–Воршелла")
+root.title("Алгоритми Дейкстри та Флойда–Воршелла (покроково)")
+root.geometry("900x700")
 
-text_area = scrolledtext.ScrolledText(root, width=80, height=25)
-text_area.pack(padx=10, pady=10)
+notebook = ttk.Notebook(root)
+notebook.pack(fill="both", expand=True)
 
-text_area.insert(tk.END, "Найкоротші шляхи від вершини 'a' (алгоритм Дейкстри):\n")
-for node, dist in dijkstra_result.items():
-    text_area.insert(tk.END, f"a → {node}: {dist}\n")
+# --- вкладка 1: Дейкстра ---
+frame_dijkstra = ttk.Frame(notebook)
+notebook.add(frame_dijkstra, text="Алгоритм Дейкстри")
 
-text_area.insert(tk.END, "\nНайкоротші відстані між усіма парами вершин (алгоритм Флойда–Воршелла):\n")
-for u in floyd_result:
-    for v in floyd_result[u]:
-        dist = floyd_result[u][v]
-        if dist == float('inf'):
-            text_area.insert(tk.END, f"{u} → {v}: -\n")
-        else:
-            text_area.insert(tk.END, f"{u} → {v}: {dist}\n")
-    text_area.insert(tk.END, "\n")
+text_dijkstra = scrolledtext.ScrolledText(frame_dijkstra, width=100, height=35)
+text_dijkstra.pack(padx=10, pady=10)
 
-# --- кнопка ---
+text_dijkstra.insert(tk.END, "📘 Покрокове виконання алгоритму Дейкстри:\n\n")
+for step in dijkstra_steps_list:
+    text_dijkstra.insert(tk.END, step)
+text_dijkstra.insert(tk.END, "\n✅ Остаточні відстані від 'a':\n")
+final_table = PrettyTable(["Вершина", "Мінімальна відстань"])
+for node, dist in sorted(dijkstra_result.items()):
+    final_table.add_row([node, dist])
+text_dijkstra.insert(tk.END, str(final_table))
+
+# --- вкладка 2: Флойд–Воршелл ---
+frame_floyd = ttk.Frame(notebook)
+notebook.add(frame_floyd, text="Алгоритм Флойда–Воршелла")
+
+text_floyd = scrolledtext.ScrolledText(frame_floyd, width=100, height=35)
+text_floyd.pack(padx=10, pady=10)
+
+text_floyd.insert(tk.END, "📗 Покрокове виконання алгоритму Флойда–Воршелла:\n\n")
+for step in floyd_steps_list:
+    text_floyd.insert(tk.END, step)
+
+# --- кнопка для графа ---
 btn_show_graph = Button(root, text="Показати граф", command=show_graph)
 btn_show_graph.pack(pady=10)
 
